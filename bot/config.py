@@ -38,7 +38,7 @@ def load_settings() -> Settings:
         bot_token=bot_token,
         rapidapi_key=rapidapi_key,
         rapidapi_host=os.getenv(
-            "RAPIDAPI_HOST", "the-numerology-api.p.rapidapi.com"
+            "RAPIDAPI_HOST", "numerology-api4.p.rapidapi.com"
         ).strip(),
         openai_api_key=openai_key,
         openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1").strip(),

@@ -5,7 +5,7 @@ Telegram-бот нумеролога: квадрат Пифагора + расш
 ## Возможности
 
 - Расчёт психоматрицы (квадрат Пифагора, школа Александрова)
-- Дополнительные числа через RapidAPI Numerology API (life path, expression, soul urge)
+- Дополнительные числа через RapidAPI Numerology API4 (destiny, soul urge, personality и др.)
 - Глубокий ИИ-анализ по 10 разделам (предназначение, таланты, финансы, дело жизни и др.)
 
 ## Быстрый старт (локально)
@@ -34,7 +34,7 @@ docker compose up -d --build
 |---|---|
 | `BOT_TOKEN` | Токен Telegram-бота |
 | `RAPIDAPI_KEY` | Ключ RapidAPI |
-| `RAPIDAPI_HOST` | Хост API (по умолчанию `the-numerology-api.p.rapidapi.com`) |
+| `RAPIDAPI_HOST` | Хост API (по умолчанию `numerology-api4.p.rapidapi.com`) |
 | `OPENAI_API_KEY` | Ключ DeepSeek |
 | `OPENAI_BASE_URL` | `https://api.deepseek.com/v1` |
 | `OPENAI_MODEL` | `deepseek-chat` |
