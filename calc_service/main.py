@@ -1,20 +1,29 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from datetime import date
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from bot.services.numerology_calc import calculate_pythagoras
+from bot.services.numerology_profile import (
+    calculate_full_profile,
+    format_profile_for_ai,
+)
 
-app = FastAPI(title="Numerology Pythagoras Calc", version="1.0.0")
+app = FastAPI(title="Numerology Calc Service", version="1.1.0")
 
 
 class BirthDateRequest(BaseModel):
     day: int = Field(ge=1, le=31)
     month: int = Field(ge=1, le=12)
     year: int = Field(ge=1900, le=2100)
+
+
+class FullProfileRequest(BirthDateRequest):
+    name: str = Field(default="Гость", max_length=64)
+    current_year: int | None = Field(default=None, ge=1900, le=2100)
 
 
 def _matrix_to_dict(matrix) -> dict[str, Any]:
@@ -45,6 +54,26 @@ def pythagoras_square(request: BirthDateRequest) -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "ok", "data": _matrix_to_dict(matrix)}
+
+
+@app.post("/v1/full-profile")
+def full_profile(request: FullProfileRequest) -> dict[str, Any]:
+    try:
+        profile = calculate_full_profile(
+            name=request.name,
+            day=request.day,
+            month=request.month,
+            year=request.year,
+            current_year=request.current_year or date.today().year,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "status": "ok",
+        "data": profile.to_dict(),
+        "summary": format_profile_for_ai(profile),
+    }
 
 
 def run() -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date
 from typing import Any
 
 import httpx
@@ -23,20 +24,13 @@ RAPIDAPI_ENDPOINTS: tuple[tuple[str, str], ...] = (
     ("personal-year", "Личный год (Personal Year)"),
 )
 
-RAPIDAPI_PSYCHOMATRIX_PATHS = (
-    "/psychomatrix",
-    "/pythagoras_square",
-    "/pythagorean_square",
-    "/birth_psychomatrix",
-)
-
 
 class NumerologyApiError(Exception):
     pass
 
 
 class NumerologyApiClient:
-    """Нумерология: RapidAPI numerology-api4 + сервис расчёта квадрата Пифагора."""
+    """Нумерология: calc-сервис (полный профиль) + RapidAPI numerology-api4."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -95,24 +89,6 @@ class NumerologyApiClient:
         except ValueError:
             return None
 
-    async def _rapidapi_get(self, path: str, params: dict[str, str]) -> dict[str, Any] | None:
-        url = f"{self._rapidapi_base}{path}"
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.get(url, headers=self._headers, params=params)
-        except httpx.HTTPError as exc:
-            logger.warning("RapidAPI GET %s network error: %s", path, exc)
-            return None
-
-        if response.status_code >= 400:
-            logger.warning("RapidAPI GET %s -> %s: %s", path, response.status_code, response.text[:300])
-            return None
-
-        try:
-            return response.json()
-        except ValueError:
-            return None
-
     async def _post_numerology(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any] | None:
         return await self._rapidapi_post(f"{self._numerology_base}/{endpoint}", payload)
 
@@ -124,90 +100,37 @@ class NumerologyApiClient:
         data = await self._post_numerology(endpoint, payload)
         return endpoint, data
 
-    @staticmethod
-    def _format_psychomatrix_from_api(data: dict[str, Any]) -> str | None:
-        if not data:
-            return None
-        if isinstance(data.get("summary"), str):
-            return data["summary"]
-        if isinstance(data.get("data"), dict) and isinstance(data["data"].get("summary"), str):
-            return data["data"]["summary"]
-
-        lines = ["Квадрат Пифагора (RapidAPI):"]
-        for key in ("matrix", "psychomatrix", "pythagoras_square", "digit_counts", "cells"):
-            if key in data:
-                lines.append(f"{key}: {data[key]}")
-        if len(lines) > 1:
-            return "\n".join(lines)
-        return None
-
-    async def _fetch_pythagoras_from_rapidapi(
+    async def _fetch_full_profile_from_calc(
         self,
         *,
-        day: int,
-        month: int,
-        year: int,
-    ) -> str | None:
-        params = {
-            "birth_year": str(year),
-            "birth_month": str(month),
-            "birth_day": str(day),
-            "year": str(year),
-            "month": str(month),
-            "day": str(day),
-        }
-        for path in RAPIDAPI_PSYCHOMATRIX_PATHS:
-            data = await self._rapidapi_get(path, params)
-            text = self._format_psychomatrix_from_api(data) if data else None
-            if text:
-                return text
-        return None
-
-    async def _fetch_pythagoras_from_calc_service(
-        self,
-        *,
+        name: str,
         day: int,
         month: int,
         year: int,
     ) -> str:
-        url = f"{self._calc_url}/v1/pythagoras-square"
-        body = {"day": day, "month": month, "year": year}
+        url = f"{self._calc_url}/v1/full-profile"
+        body = {
+            "name": name,
+            "day": day,
+            "month": month,
+            "year": year,
+            "current_year": date.today().year,
+        }
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(url, json=body)
         except httpx.HTTPError as exc:
-            raise NumerologyApiError("Сервис расчёта квадрата Пифагора недоступен.") from exc
+            raise NumerologyApiError("Сервис нумерологического расчёта недоступен.") from exc
 
         if response.status_code >= 400:
             logger.error("Calc service %s -> %s: %s", url, response.status_code, response.text[:300])
-            raise NumerologyApiError("Не удалось рассчитать квадрат Пифагора на сервисе.")
+            raise NumerologyApiError("Не удалось получить расчёт с сервиса нумерологии.")
 
         data = response.json()
-        payload = data.get("data") or {}
-        summary = payload.get("summary")
+        summary = data.get("summary")
         if not summary:
-            raise NumerologyApiError("Сервис расчёта вернул пустой ответ.")
+            raise NumerologyApiError("Сервис расчёта вернул пустой профиль.")
         return summary
-
-    async def fetch_pythagoras_matrix(
-        self,
-        *,
-        day: int,
-        month: int,
-        year: int,
-    ) -> str:
-        rapidapi_text = await self._fetch_pythagoras_from_rapidapi(
-            day=day,
-            month=month,
-            year=year,
-        )
-        if rapidapi_text:
-            return rapidapi_text
-        return await self._fetch_pythagoras_from_calc_service(
-            day=day,
-            month=month,
-            year=year,
-        )
 
     async def fetch_supplementary(
         self,
@@ -233,7 +156,7 @@ class NumerologyApiClient:
         if not data:
             return ""
 
-        lines = ["Данные Numerology API (numerology-api4):"]
+        lines = ["=== ДОПОЛНИТЕЛЬНО (RapidAPI numerology-api4) ==="]
         labels = dict(RAPIDAPI_ENDPOINTS)
         for endpoint, detail in data.items():
             label = labels.get(endpoint, endpoint)
@@ -252,11 +175,13 @@ class NumerologyApiClient:
         month: int,
         year: int,
     ) -> str:
-        matrix_task = self.fetch_pythagoras_matrix(day=day, month=month, year=year)
+        profile_task = self._fetch_full_profile_from_calc(
+            name=name, day=day, month=month, year=year
+        )
         extra_task = self.fetch_supplementary(name=name, day=day, month=month, year=year)
-        matrix_text, extra = await asyncio.gather(matrix_task, extra_task)
+        profile_text, extra = await asyncio.gather(profile_task, extra_task)
 
-        parts = [matrix_text]
+        parts = [profile_text]
         extra_text = self.format_supplementary(extra)
         if extra_text:
             parts.append(extra_text)
