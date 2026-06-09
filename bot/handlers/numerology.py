@@ -10,7 +10,7 @@ from aiogram.types import Message
 from bot.services.ai_interpreter import AiInterpreter
 from bot.services.messaging import send_long_text
 from bot.services.numerology_api import NumerologyApiClient, NumerologyApiError
-from bot.services.numerology_calc import calculate_pythagoras, parse_birth_date
+from bot.services.numerology_calc import parse_birth_date
 from bot.states import NumerologyStates
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ async def on_birth_date(
     status = await message.answer("Произвожу все необходимые расчеты")
 
     try:
-        numerology_data = await numerology_api.fetch_full_profile(
+        profile = await numerology_api.fetch_full_profile(
             name=name,
             day=day,
             month=month,
@@ -76,12 +76,11 @@ async def on_birth_date(
         return
     except Exception:
         logger.exception("Numerology API failed")
-        await status.edit_text("❌ Не удалось получить данные с сервиса нумерологии.")
+        await status.edit_text("❌ Не удалось получить данные с RapidAPI.")
         return
 
-    matrix = calculate_pythagoras(day, month, year)
     await status.edit_text(
-        f"<pre>{matrix.format_matrix()}</pre>\n\n"
+        f"<pre>{profile.matrix_text}</pre>\n\n"
         "Готовлю глубокий анализ вашей личности…"
     )
 
@@ -91,7 +90,7 @@ async def on_birth_date(
         analysis = await ai.interpret(
             name=name,
             birth_date=birth_date,
-            numerology_data=numerology_data,
+            numerology_data=profile.summary_text,
         )
     except Exception:
         logger.exception("AI interpretation failed")

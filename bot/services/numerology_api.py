@@ -2,26 +2,34 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 import httpx
 
 from bot.config import Settings
+from bot.services.numerology_calc import calculate_pythagoras
 
 logger = logging.getLogger(__name__)
 
-BASE_PATH = "/v1/numerology"
-
-RAPIDAPI_ENDPOINTS: tuple[tuple[str, str], ...] = (
-    ("destiny", "Число судьбы (Destiny)"),
-    ("personality", "Число личности (Personality)"),
-    ("character", "Число характера (Character)"),
-    ("soul-urge", "Число души (Soul Urge)"),
-    ("attitude", "Число отношения (Attitude)"),
-    ("hidden-agenda", "Скрытая повестка (Hidden Agenda)"),
-    ("divine-purpose", "Божественное предназначение (Divine Purpose)"),
-    ("personal-year", "Личный год (Personal Year)"),
+# Эндпоинты the-numerology-api (RapidAPI). Психоматрицы на Rapid нет —
+# квадрат Пифагора считается локально (школа Александрова).
+RAPID_NUMEROLOGY_ENDPOINTS: tuple[str, ...] = (
+    "life_path",
+    "attitude_number",
+    "challenge_number",
+    "karmic_debt",
+    "karmic_lessons",
+    "destiny_number",
+    "heart_desire",
+    "personality_number",
+    "personal_year",
+    "period_cycles",
+    "lucky_numbers",
+    "balance_number",
+    "subconscious_number",
+    "thought_number",
 )
 
 
@@ -29,8 +37,97 @@ class NumerologyApiError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class NameParts:
+    first_name: str
+    middle_name: str
+    last_name: str
+    full_name: str
+    initials: str
+
+
+@dataclass(frozen=True)
+class NumerologyProfile:
+    matrix_text: str
+    summary_text: str
+
+
+def split_full_name(full_name: str) -> NameParts:
+    parts = [p for p in full_name.split() if p]
+    if not parts:
+        first, middle, last = "Guest", "", "Guest"
+    elif len(parts) == 1:
+        first, middle, last = parts[0], "", parts[0]
+    elif len(parts) == 2:
+        first, middle, last = parts[0], "", parts[1]
+    else:
+        first, middle, last = parts[0], " ".join(parts[1:-1]), parts[-1]
+
+    initials = "".join(part[0].upper() for part in (first, middle, last) if part) or "X"
+    return NameParts(
+        first_name=first,
+        middle_name=middle,
+        last_name=last,
+        full_name=" ".join(parts) if parts else "Guest",
+        initials=initials,
+    )
+
+
+def _format_scalar(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "да" if value else "нет"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        items = [_format_scalar(item) for item in value]
+        return "; ".join(item for item in items if item)
+    if isinstance(value, dict):
+        return _format_dict(value)
+    return str(value)
+
+
+def _format_dict(data: dict[str, Any], *, indent: int = 0) -> str:
+    lines: list[str] = []
+    prefix = "  " * indent
+    for key, value in data.items():
+        if key.startswith("_"):
+            continue
+        if isinstance(value, dict):
+            lines.append(f"{prefix}{key}:")
+            nested = _format_dict(value, indent=indent + 1)
+            if nested:
+                lines.append(nested)
+            continue
+        text = _format_scalar(value)
+        if text:
+            lines.append(f"{prefix}{key}: {text}")
+    return "\n".join(lines)
+
+
+ENDPOINT_LABELS: dict[str, str] = {
+    "life_path": "Число жизненного пути (Life Path)",
+    "attitude_number": "Число отношения / Солнца (Attitude)",
+    "challenge_number": "Числа испытаний (Challenge)",
+    "karmic_debt": "Кармический долг (Karmic Debt)",
+    "karmic_lessons": "Кармические уроки (Karmic Lessons)",
+    "destiny_number": "Число судьбы / экспрессии (Destiny)",
+    "heart_desire": "Число души (Heart's Desire / Soul Urge)",
+    "personality_number": "Число личности (Personality)",
+    "personal_year": "Личный год (Personal Year)",
+    "period_cycles": "Жизненные периоды (Period Cycles)",
+    "lucky_numbers": "Счастливые числа (Lucky Numbers)",
+    "balance_number": "Число баланса (Balance)",
+    "subconscious_number": "Число подсознания (Subconscious Self)",
+    "thought_number": "Число рациональной мысли (Rational Thought)",
+}
+
+
 class NumerologyApiClient:
-    """Нумерология: calc-сервис (полный профиль) + RapidAPI numerology-api4."""
+    """Нумерология через RapidAPI the-numerology-api + локальный квадрат Пифагора."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -39,133 +136,128 @@ class NumerologyApiClient:
             "x-rapidapi-host": settings.rapidapi_host,
             "Content-Type": "application/json",
         }
-        self._rapidapi_base = f"https://{settings.rapidapi_host}"
-        self._numerology_base = f"{self._rapidapi_base}{BASE_PATH}"
-        self._calc_url = settings.calc_service_url
+        self._base_url = f"https://{settings.rapidapi_host}"
 
-    @staticmethod
-    def _split_name(full_name: str) -> tuple[str, str]:
-        parts = [p for p in full_name.split() if p]
-        if not parts:
-            return "User", "Guest"
-        if len(parts) == 1:
-            return parts[0], ""
-        return parts[0], parts[-1]
-
-    def _person_payload(
+    def _endpoint_params(
         self,
+        endpoint: str,
         *,
-        name: str,
+        name: NameParts,
         day: int,
         month: int,
         year: int,
     ) -> dict[str, Any]:
-        first_name, last_name = self._split_name(name)
-        return {
-            "firstName": first_name,
-            "lastName": last_name or first_name,
-            "day": day,
-            "month": month,
-            "year": year,
-            "phoneNumber": "+70000000000",
-            "email": "user@numerolog.bot",
-            "language": "en",
+        dob = f"{year:04d}-{month:02d}-{day:02d}"
+        birth = {
+            "birth_year": year,
+            "birth_month": month,
+            "birth_day": day,
         }
+        if endpoint in {"life_path", "attitude_number", "challenge_number", "karmic_debt", "period_cycles"}:
+            return birth
+        if endpoint == "personal_year":
+            return {
+                **birth,
+                "prediction_year": date.today().year,
+            }
+        if endpoint in {"destiny_number", "heart_desire", "personality_number"}:
+            return {
+                "first_name": name.first_name,
+                "middle_name": name.middle_name or name.first_name,
+                "last_name": name.last_name,
+            }
+        if endpoint == "karmic_lessons":
+            return {"full_name": name.full_name}
+        if endpoint == "lucky_numbers":
+            return {"birthdate": dob, "full_name": name.full_name}
+        if endpoint == "balance_number":
+            return {"initials": name.initials}
+        if endpoint == "subconscious_number":
+            return {"name": name.full_name}
+        if endpoint == "thought_number":
+            return {"first_name": name.first_name, "birth_day": day}
+        raise ValueError(f"Unknown endpoint: {endpoint}")
 
-    async def _rapidapi_post(self, url: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    async def _rapidapi_get(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any] | None:
+        url = f"{self._base_url}/{endpoint}"
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, headers=self._headers, json=payload)
+                response = await client.get(url, headers=self._headers, params=params)
         except httpx.HTTPError as exc:
-            logger.warning("RapidAPI POST %s network error: %s", url, exc)
+            logger.warning("RapidAPI GET %s network error: %s", endpoint, exc)
             return None
 
         if response.status_code >= 400:
-            logger.warning("RapidAPI POST %s -> %s: %s", url, response.status_code, response.text[:300])
+            logger.warning(
+                "RapidAPI GET %s -> %s: %s",
+                endpoint,
+                response.status_code,
+                response.text[:300],
+            )
             return None
 
         try:
-            return response.json()
+            data = response.json()
         except ValueError:
             return None
 
-    async def _post_numerology(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any] | None:
-        return await self._rapidapi_post(f"{self._numerology_base}/{endpoint}", payload)
+        if not isinstance(data, dict):
+            return None
 
-    async def _fetch_one(
+        message = data.get("message")
+        if isinstance(message, str):
+            lowered = message.lower()
+            if "disabled for your subscription" in lowered:
+                logger.info("RapidAPI %s skipped: subscription tier", endpoint)
+                return None
+            if "missing required" in lowered or "does not exist" in lowered:
+                logger.warning("RapidAPI %s: %s", endpoint, message)
+                return None
+
+        return data
+
+    async def _fetch_endpoint(
         self,
         endpoint: str,
-        payload: dict[str, Any],
+        params: dict[str, Any],
     ) -> tuple[str, dict[str, Any] | None]:
-        data = await self._post_numerology(endpoint, payload)
-        return endpoint, data
+        return endpoint, await self._rapidapi_get(endpoint, params)
 
-    async def _fetch_full_profile_from_calc(
-        self,
-        *,
-        name: str,
-        day: int,
-        month: int,
-        year: int,
-    ) -> str:
-        url = f"{self._calc_url}/v1/full-profile"
-        body = {
-            "name": name,
-            "day": day,
-            "month": month,
-            "year": year,
-            "current_year": date.today().year,
-        }
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, json=body)
-        except httpx.HTTPError as exc:
-            raise NumerologyApiError("Сервис нумерологического расчёта недоступен.") from exc
-
-        if response.status_code >= 400:
-            logger.error("Calc service %s -> %s: %s", url, response.status_code, response.text[:300])
-            raise NumerologyApiError("Не удалось получить расчёт с сервиса нумерологии.")
-
-        data = response.json()
-        summary = data.get("summary")
-        if not summary:
-            raise NumerologyApiError("Сервис расчёта вернул пустой профиль.")
-        return summary
-
-    async def fetch_supplementary(
-        self,
-        *,
-        name: str,
-        day: int,
-        month: int,
-        year: int,
-    ) -> dict[str, Any]:
-        payload = self._person_payload(name=name, day=day, month=month, year=year)
-        tasks = [self._fetch_one(ep, payload) for ep, _ in RAPIDAPI_ENDPOINTS]
-        results = await asyncio.gather(*tasks)
-
-        output: dict[str, Any] = {}
-        for endpoint, data in results:
-            if not data or data.get("statusValue") != 200:
-                continue
-            detail = data.get("detail") or {}
-            output[endpoint] = detail
-        return output
-
-    def format_supplementary(self, data: dict[str, Any]) -> str:
-        if not data:
+    def _format_endpoint_block(self, endpoint: str, data: dict[str, Any]) -> str:
+        label = ENDPOINT_LABELS.get(endpoint, endpoint)
+        body = _format_dict(data)
+        if not body:
             return ""
+        return f"=== {label} ===\n{body}"
 
-        lines = ["=== ДОПОЛНИТЕЛЬНО (RapidAPI numerology-api4) ==="]
-        labels = dict(RAPIDAPI_ENDPOINTS)
-        for endpoint, detail in data.items():
-            label = labels.get(endpoint, endpoint)
-            number = detail.get("number", "—")
-            message = detail.get("message", "")
-            lines.append(f"- {label}: {number}")
-            if message:
-                lines.append(f"  {message}")
-        return "\n".join(lines)
+    def _build_summary(
+        self,
+        *,
+        name: str,
+        day: int,
+        month: int,
+        year: int,
+        matrix_summary: str,
+        rapid_data: dict[str, dict[str, Any]],
+    ) -> str:
+        lines = [
+            f"Имя: {name}",
+            f"Дата рождения: {day:02d}.{month:02d}.{year}",
+            "",
+            "=== КВАДРАТ ПИФАГОРА (школа Александрова) ===",
+            matrix_summary,
+            "",
+            "=== ДАННЫЕ RAPIDAPI (the-numerology-api) ===",
+        ]
+        for endpoint in RAPID_NUMEROLOGY_ENDPOINTS:
+            payload = rapid_data.get(endpoint)
+            if not payload:
+                continue
+            block = self._format_endpoint_block(endpoint, payload)
+            if block:
+                lines.append(block)
+                lines.append("")
+        return "\n".join(lines).strip()
 
     async def fetch_full_profile(
         self,
@@ -174,15 +266,44 @@ class NumerologyApiClient:
         day: int,
         month: int,
         year: int,
-    ) -> str:
-        profile_task = self._fetch_full_profile_from_calc(
-            name=name, day=day, month=month, year=year
-        )
-        extra_task = self.fetch_supplementary(name=name, day=day, month=month, year=year)
-        profile_text, extra = await asyncio.gather(profile_task, extra_task)
+    ) -> NumerologyProfile:
+        name_parts = split_full_name(name)
+        matrix = calculate_pythagoras(day, month, year)
 
-        parts = [profile_text]
-        extra_text = self.format_supplementary(extra)
-        if extra_text:
-            parts.append(extra_text)
-        return "\n\n".join(parts)
+        tasks = [
+            self._fetch_endpoint(
+                endpoint,
+                self._endpoint_params(
+                    endpoint,
+                    name=name_parts,
+                    day=day,
+                    month=month,
+                    year=year,
+                ),
+            )
+            for endpoint in RAPID_NUMEROLOGY_ENDPOINTS
+        ]
+        results = await asyncio.gather(*tasks)
+
+        rapid_data: dict[str, dict[str, Any]] = {}
+        for endpoint, payload in results:
+            if payload:
+                rapid_data[endpoint] = payload
+
+        if not rapid_data:
+            raise NumerologyApiError(
+                "Не удалось получить данные с RapidAPI. Проверьте подписку и RAPIDAPI_HOST."
+            )
+
+        summary_text = self._build_summary(
+            name=name_parts.full_name,
+            day=day,
+            month=month,
+            year=year,
+            matrix_summary=matrix.format_summary(),
+            rapid_data=rapid_data,
+        )
+        return NumerologyProfile(
+            matrix_text=matrix.format_matrix(),
+            summary_text=summary_text,
+        )

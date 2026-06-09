@@ -1,26 +1,11 @@
 services:
-  numerolog-calc:
-    build: .
-    image: ai_numerolog:latest
-    restart: unless-stopped
-    command: ["python", "-m", "calc_service.main"]
-    volumes:
-      - ./bot:/app/bot
-      - ./calc_service:/app/calc_service
-
   ai-numerolog:
     build: .
     image: ai_numerolog:latest
     restart: unless-stopped
-    depends_on:
-      - numerolog-calc
     env_file:
       - .env
-    environment:
-      # Внутренняя сеть Docker на VPS — не localhost разработчика
-      CALC_SERVICE_URL: http://numerolog-calc:8791
     volumes:
       - ./bot:/app/bot
-      - ./calc_service:/app/calc_service
       - ./prompts:/app/prompts
       - ./data:/data
