@@ -10,7 +10,7 @@ from aiogram.types import Message
 from bot.services.ai_interpreter import AiInterpreter
 from bot.services.messaging import send_long_text
 from bot.services.numerology_api import NumerologyApiClient, NumerologyApiError
-from bot.services.numerology_calc import parse_birth_date
+from bot.services.numerology_calc import calculate_pythagoras, parse_birth_date
 from bot.states import NumerologyStates
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,11 @@ async def on_birth_date(
         await status.edit_text("❌ Не удалось получить данные с сервиса нумерологии.")
         return
 
-    await status.edit_text("Готовлю глубокий анализ вашей личности…")
+    matrix = calculate_pythagoras(day, month, year)
+    await status.edit_text(
+        f"<pre>{matrix.format_matrix()}</pre>\n\n"
+        "Готовлю глубокий анализ вашей личности…"
+    )
 
     birth_date = f"{day:02d}.{month:02d}.{year}"
 
