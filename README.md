@@ -6,7 +6,7 @@ Telegram-бот нумеролога: квадрат Пифагора + расш
 
 - Полный нумерологический профиль через сервис `numerolog-calc` на VPS
 - Дополнительные числа через RapidAPI Numerology API4 (destiny, soul urge и др.)
-- Глубокий ИИ-анализ по 10 разделам (предназначение, таланты, финансы, дело жизни и др.)
+- Глубокий ИИ-анализ по 20 разделам (промпт `numerolog_encryption_ext.txt`)
 
 ## Архитектура на VPS
 
@@ -57,13 +57,17 @@ docker compose up -d --build
 
 ## Деплой на VPS
 
+Все изменения сначала попадают в GitHub, затем на сервер — **не копируйте файлы на VPS вручную**.
+
 ```bash
-# Первичная настройка на сервере
+# Первичная настройка на сервере (один раз)
 REPO_URL=https://github.com/distapcher/AI-Numerolog.git DEPLOY_DIR=/opt/AI-Numerolog bash scripts/server-setup.sh
 
-# Обновление
+# Обычное обновление: commit → push → pull на VPS → перезапуск Docker
 ./scripts/deploy.sh "описание изменений"
 ```
+
+Скрипт `scripts/deploy.sh` делает `git push` и на сервере `git pull --ff-only` + `docker compose up -d --build`.
 
 ## Команды бота
 

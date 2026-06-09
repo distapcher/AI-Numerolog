@@ -41,6 +41,7 @@ class AiInterpreter:
         self,
         *,
         name: str,
+        birth_date: str,
         numerology_data: str,
     ) -> str:
         if not self._enabled:
@@ -48,15 +49,20 @@ class AiInterpreter:
 
         system_prompt = self._load_system_prompt()
         if not system_prompt:
-            raise RuntimeError("Файл системного промпта не найден.")
+            raise RuntimeError(f"Файл системного промпта не найден: {self._settings.prompt_path}")
 
         user_content = (
-            f"Имя: {name}\n\n"
-            f"Нумерологические данные для анализа:\n\n{numerology_data}\n\n"
-            "Проведи анализ строго по структуре из системного промпта (все 10 разделов). "
-            "Обращайся к человеку на «ты». "
+            f"ДАННЫЕ ДЛЯ АНАЛИЗА:\n"
+            f"- ФИО: {name}\n"
+            f"- Дата рождения (формат ДД.ММ.ГГГГ): {birth_date}\n\n"
+            "РАССЧИТАННЫЕ НУМЕРОЛОГИЧЕСКИЕ ДАННЫЕ "
+            "(используй как основу расчётов, не пересчитывай самостоятельно):\n\n"
+            f"{numerology_data}\n\n"
+            "Проведи анализ строго по структуре из системного промпта (все 20 разделов). "
+            "Обращайся к человеку только на «вы». "
             "Не используй символы * и # и markdown. "
-            "Не используй эмодзи."
+            "Не используй эмодзи. "
+            "Каждый вывод опирай на конкретные числа из данных выше."
         )
 
         url = f"{self._settings.openai_base_url.rstrip('/')}/chat/completions"

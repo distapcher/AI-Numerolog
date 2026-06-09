@@ -7,7 +7,7 @@ import os
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_PROMPT_PATH = BASE_DIR / "prompts" / "decryption_ru.txt"
+DEFAULT_PROMPT_PATH = BASE_DIR / "prompts" / "numerolog_encryption_ext.txt"
 
 
 @dataclass(frozen=True)
@@ -48,5 +48,5 @@ def load_settings() -> Settings:
         openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1").strip(),
         openai_model=os.getenv("OPENAI_MODEL", "deepseek-chat").strip(),
         prompt_path=prompt_path,
-        ai_max_tokens=int(os.getenv("AI_MAX_TOKENS", "12000")),
+        ai_max_tokens=int(os.getenv("AI_MAX_TOKENS", "20000")),
     )

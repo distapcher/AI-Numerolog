@@ -89,8 +89,14 @@ async def on_birth_date(
         "⏳ Готовлю расшифровку через ИИ (это может занять несколько минут)…"
     )
 
+    birth_date = f"{day:02d}.{month:02d}.{year}"
+
     try:
-        analysis = await ai.interpret(name=name, numerology_data=numerology_data)
+        analysis = await ai.interpret(
+            name=name,
+            birth_date=birth_date,
+            numerology_data=numerology_data,
+        )
     except Exception:
         logger.exception("AI interpretation failed")
         await message.answer(
