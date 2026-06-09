@@ -21,7 +21,7 @@ async def _start_flow(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(NumerologyStates.name)
     await message.answer(
-        "Введите <b>имя</b> для анализа (или «—», если без имени):",
+        "Введите полное имя (ФИО) для анализа :",
     )
 
 
