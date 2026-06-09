@@ -9,8 +9,8 @@ from aiogram.types import Message
 
 from bot.services.ai_interpreter import AiInterpreter
 from bot.services.messaging import send_long_text
-from bot.services.numerology_api import NumerologyApiClient
-from bot.services.numerology_calc import calculate_pythagoras, parse_birth_date
+from bot.services.numerology_api import NumerologyApiClient, NumerologyApiError
+from bot.services.numerology_calc import parse_birth_date
 from bot.states import NumerologyStates
 
 logger = logging.getLogger(__name__)
@@ -62,25 +62,30 @@ async def on_birth_date(
     name = data.get("name", "Гость")
     await state.clear()
 
-    status = await message.answer("⏳ Рассчитываю квадрат Пифагора…")
-    matrix = calculate_pythagoras(day, month, year)
+    status = await message.answer("⏳ Запрашиваю расчёт на сервисе нумерологии…")
 
-    await status.edit_text("⏳ Запрашиваю дополнительные данные…")
-    extra = await numerology_api.fetch_supplementary(
-        name=name,
-        day=day,
-        month=month,
-        year=year,
-    )
-    extra_text = numerology_api.format_supplementary(extra)
+    try:
+        numerology_data = await numerology_api.fetch_full_profile(
+            name=name,
+            day=day,
+            month=month,
+            year=year,
+        )
+    except NumerologyApiError as exc:
+        await status.edit_text(f"❌ {exc}")
+        return
+    except Exception:
+        logger.exception("Numerology API failed")
+        await status.edit_text("❌ Не удалось получить данные с сервиса нумерологии.")
+        return
 
-    numerology_data = matrix.format_summary()
-    if extra_text:
-        numerology_data = f"{numerology_data}\n\n{extra_text}"
+    preview = numerology_data[:3500]
+    if len(numerology_data) > 3500:
+        preview += "\n…"
 
     await status.edit_text(
         "✅ Расчёт готов.\n\n"
-        f"<pre>{matrix.format_summary()}</pre>\n\n"
+        f"<pre>{preview}</pre>\n\n"
         "⏳ Готовлю расшифровку через ИИ (это может занять несколько минут)…"
     )
 

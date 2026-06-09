@@ -15,6 +15,7 @@ class Settings:
     bot_token: str
     rapidapi_key: str
     rapidapi_host: str
+    calc_service_url: str
     openai_api_key: str | None
     openai_base_url: str
     openai_model: str
@@ -40,6 +41,9 @@ def load_settings() -> Settings:
         rapidapi_host=os.getenv(
             "RAPIDAPI_HOST", "numerology-api4.p.rapidapi.com"
         ).strip(),
+        calc_service_url=os.getenv(
+            "CALC_SERVICE_URL", "http://127.0.0.1:8791"
+        ).strip().rstrip("/"),
         openai_api_key=openai_key,
         openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1").strip(),
         openai_model=os.getenv("OPENAI_MODEL", "deepseek-chat").strip(),

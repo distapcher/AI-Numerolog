@@ -7,6 +7,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md /app/
 COPY bot /app/bot
+COPY calc_service /app/calc_service
 COPY prompts /app/prompts
 
 RUN pip install --no-cache-dir -U pip && pip install --no-cache-dir -e .
