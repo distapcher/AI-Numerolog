@@ -13,6 +13,29 @@ from bot.services.numerology_calc import calculate_pythagoras
 
 logger = logging.getLogger(__name__)
 
+_CYRILLIC_TO_LATIN: dict[str, str] = {
+    "А": "A", "Б": "B", "В": "V", "Г": "G", "Д": "D", "Е": "E", "Ё": "E",
+    "Ж": "ZH", "З": "Z", "И": "I", "Й": "Y", "К": "K", "Л": "L", "М": "M",
+    "Н": "N", "О": "O", "П": "P", "Р": "R", "С": "S", "Т": "T", "У": "U",
+    "Ф": "F", "Х": "KH", "Ц": "TS", "Ч": "CH", "Ш": "SH", "Щ": "SHCH",
+    "Ъ": "", "Ы": "Y", "Ь": "", "Э": "E", "Ю": "YU", "Я": "YA",
+}
+
+
+def _transliterate_for_api(text: str) -> str:
+    if not text:
+        return text
+    parts: list[str] = []
+    for char in text:
+        upper = char.upper()
+        if upper in _CYRILLIC_TO_LATIN:
+            latin = _CYRILLIC_TO_LATIN[upper]
+            parts.append(latin.lower() if char.islower() else latin)
+        else:
+            parts.append(char)
+    return "".join(parts)
+
+
 # Эндпоинты the-numerology-api (RapidAPI). Психоматрицы на Rapid нет —
 # квадрат Пифагора считается локально (школа Александрова).
 RAPID_NUMEROLOGY_ENDPOINTS: tuple[str, ...] = (
@@ -44,6 +67,28 @@ class NameParts:
     last_name: str
     full_name: str
     initials: str
+
+
+def _api_name_parts(name: NameParts) -> NameParts:
+    """RapidAPI частично не принимает кириллицу в full_name — шлём латиницу."""
+    if all(ord(ch) < 128 for ch in name.full_name):
+        return name
+    return NameParts(
+        first_name=_transliterate_for_api(name.first_name),
+        middle_name=_transliterate_for_api(name.middle_name),
+        last_name=_transliterate_for_api(name.last_name),
+        full_name=_transliterate_for_api(name.full_name),
+        initials="".join(
+            part[0].upper()
+            for part in (
+                _transliterate_for_api(name.first_name),
+                _transliterate_for_api(name.middle_name),
+                _transliterate_for_api(name.last_name),
+            )
+            if part
+        )
+        or name.initials,
+    )
 
 
 @dataclass(frozen=True)
@@ -204,6 +249,10 @@ class NumerologyApiClient:
         if not isinstance(data, dict):
             return None
 
+        if data.get("error"):
+            logger.warning("RapidAPI %s error: %s", endpoint, data.get("error"))
+            return None
+
         message = data.get("message")
         if isinstance(message, str):
             lowered = message.lower()
@@ -268,6 +317,7 @@ class NumerologyApiClient:
         year: int,
     ) -> NumerologyProfile:
         name_parts = split_full_name(name)
+        api_names = _api_name_parts(name_parts)
         matrix = calculate_pythagoras(day, month, year)
 
         tasks = [
@@ -275,7 +325,7 @@ class NumerologyApiClient:
                 endpoint,
                 self._endpoint_params(
                     endpoint,
-                    name=name_parts,
+                    name=api_names,
                     day=day,
                     month=month,
                     year=year,
