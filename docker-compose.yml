@@ -1,0 +1,12 @@
+services:
+  ai-numerolog:
+    build: .
+    image: ai_numerolog:latest
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ./bot:/app/bot
+      - ./prompts:/app/prompts
+      - ./data:/data
