@@ -85,9 +85,10 @@ def calculate_pythagoras(day: int, month: int, year: int) -> PythagorasMatrix:
     working = sum(date_digits)
     second = _sum_digits(working)
 
-    day_str = str(day)
-    first_day_digit = int(day_str[0])
-    third = day - 2 * first_day_digit
+    # Школа Александрова: из рабочего числа вычитается удвоенная
+    # первая цифра дня рождения (25 → 2, 2 → 2, 15 → 1).
+    first_day_digit = int(str(day)[0])
+    third = working - 2 * first_day_digit
     fourth = _sum_digits(third)
 
     all_digits: list[int] = []
