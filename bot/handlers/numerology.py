@@ -62,7 +62,7 @@ async def on_birth_date(
     name = data.get("name", "Гость")
     await state.clear()
 
-    status = await message.answer("⏳ Запрашиваю расчёт на сервисе нумерологии…")
+    status = await message.answer("Произвожу все необходимые расчеты")
 
     try:
         numerology_data = await numerology_api.fetch_full_profile(
@@ -79,15 +79,7 @@ async def on_birth_date(
         await status.edit_text("❌ Не удалось получить данные с сервиса нумерологии.")
         return
 
-    preview = numerology_data[:3500]
-    if len(numerology_data) > 3500:
-        preview += "\n…"
-
-    await status.edit_text(
-        "✅ Расчёт готов.\n\n"
-        f"<pre>{preview}</pre>\n\n"
-        "⏳ Готовлю расшифровку через ИИ (это может занять несколько минут)…"
-    )
+    await status.edit_text("Готовлю глубокий анализ вашей личности…")
 
     birth_date = f"{day:02d}.{month:02d}.{year}"
 
