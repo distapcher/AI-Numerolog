@@ -4,9 +4,24 @@ Telegram-бот нумеролога: квадрат Пифагора + расш
 
 ## Возможности
 
-- Квадрат Пифагора через сервис расчёта на VPS (`numerolog-calc`, порт 8791)
-- Числа через RapidAPI Numerology API4 (destiny, soul urge, personality и др.)
+- Полный нумерологический профиль через сервис `numerolog-calc` на VPS
+- Дополнительные числа через RapidAPI Numerology API4 (destiny, soul urge и др.)
 - Глубокий ИИ-анализ по 10 разделам (предназначение, таланты, финансы, дело жизни и др.)
+
+## Архитектура на VPS
+
+На сервере работают **два Docker-контейнера** в одной сети:
+
+```
+Telegram → ai-numerolog (бот)
+              ├→ numerolog-calc:8791  (расчёты, внутри VPS)
+              ├→ numerology-api4      (RapidAPI, интернет)
+              └→ DeepSeek API         (расшифровка, интернет)
+```
+
+`127.0.0.1` в продакшене **не используется**. Бот обращается к сервису расчёта по имени `http://numerolog-calc:8791` — это внутренний адрес Docker на VPS, не ваш компьютер.
+
+Локальная машина нужна только для разработки и `git push`. Продакшен — только VPS.
 
 ## Быстрый старт (локально)
 
@@ -35,7 +50,7 @@ docker compose up -d --build
 | `BOT_TOKEN` | Токен Telegram-бота |
 | `RAPIDAPI_KEY` | Ключ RapidAPI |
 | `RAPIDAPI_HOST` | Хост API (по умолчанию `numerology-api4.p.rapidapi.com`) |
-| `CALC_SERVICE_URL` | URL сервиса квадрата Пифагора (`http://127.0.0.1:8791`) |
+| `CALC_SERVICE_URL` | URL сервиса расчёта (на VPS в Docker: `http://numerolog-calc:8791`, задаётся в compose) |
 | `OPENAI_API_KEY` | Ключ DeepSeek |
 | `OPENAI_BASE_URL` | `https://api.deepseek.com/v1` |
 | `OPENAI_MODEL` | `deepseek-chat` |

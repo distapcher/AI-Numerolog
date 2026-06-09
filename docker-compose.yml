@@ -3,7 +3,6 @@ services:
     build: .
     image: ai_numerolog:latest
     restart: unless-stopped
-    network_mode: host
     command: ["python", "-m", "calc_service.main"]
     volumes:
       - ./bot:/app/bot
@@ -13,11 +12,13 @@ services:
     build: .
     image: ai_numerolog:latest
     restart: unless-stopped
-    network_mode: host
     depends_on:
       - numerolog-calc
     env_file:
       - .env
+    environment:
+      # Внутренняя сеть Docker на VPS — не localhost разработчика
+      CALC_SERVICE_URL: http://numerolog-calc:8791
     volumes:
       - ./bot:/app/bot
       - ./calc_service:/app/calc_service

@@ -42,7 +42,7 @@ def load_settings() -> Settings:
             "RAPIDAPI_HOST", "numerology-api4.p.rapidapi.com"
         ).strip(),
         calc_service_url=os.getenv(
-            "CALC_SERVICE_URL", "http://127.0.0.1:8791"
+            "CALC_SERVICE_URL", "http://numerolog-calc:8791"
         ).strip().rstrip("/"),
         openai_api_key=openai_key,
         openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1").strip(),
